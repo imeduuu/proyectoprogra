@@ -90,3 +90,10 @@ class Simulation:
 
     def get_route_frequencies(self):
         return self.route_log.inorder()
+
+    def dijkstra_route(self, origin, destination):
+        """
+        Calcula la ruta más corta entre origin y destination usando Dijkstra.
+        Retorna (camino, costo).
+        """
+        return self.graph.dijkstra(origin, destination)

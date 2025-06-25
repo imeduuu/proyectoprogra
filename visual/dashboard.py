@@ -5,6 +5,10 @@ from visual.networkx_adapter import NetworkXAdapter
 from visual.avl_visualizer import AVLVisualizer
 from domain.client import Client
 import matplotlib.pyplot as plt
+from visual.map.map_builder import MapBuilder
+from visual.map.flight_summary import plot_flight_path
+from streamlit_folium import st_folium
+
 
 if 'sim' not in st.session_state: # Inicializar la simulación
     st.session_state.sim = None     
@@ -57,59 +61,93 @@ def run():
     with tab2:
         st.header("🌍 Explore Network")
         if st.session_state.sim:
-            available_nodes = list(st.session_state.sim.graph.vertices.keys())
-            origin = st.selectbox("Origen", available_nodes, key="origin_input")
-            destination = st.selectbox("Destino", available_nodes, key="destination_input")
+            graph = st.session_state.sim.graph
 
-            # Calcular ruta y guardarla en session_state
+            # --- Asignar coordenadas simuladas si no existen ---
+            # (Puedes reemplazar esto por coordenadas reales si las tienes)
+            if not hasattr(graph, "coords"):
+                import random
+                graph.coords = {}
+                for node in graph.vertices:
+                    # Coordenadas aleatorias cerca de Temuco
+                    lat = -38.7359 + random.uniform(-0.03, 0.03)
+                    lon = -72.5904 + random.uniform(-0.03, 0.03)
+                    graph.coords[node] = (lat, lon)
+
+            # Filtrar nodos por rol
+            storage_nodes = [k for k, v in graph.vertices.items() if v.role == "storage"]
+            client_nodes = [k for k, v in graph.vertices.items() if v.role == "client"]
+
+            origin = st.selectbox("Origen (Almacenamiento)", storage_nodes, key="origin_input")
+            destination = st.selectbox("Destino (Cliente)", client_nodes, key="destination_input")
+
+            # Elegir algoritmo
+            algorithm = st.radio("Algoritmo de ruta", ["Dijkstra"], horizontal=True)
+
+            # Construir mapa base
+            builder = MapBuilder()
+            # Agregar nodos
+            for node, v in graph.vertices.items():
+                lat, lon = graph.coords[node]
+                color = "#1f77b4" if v.role == "storage" else "#2ca02c" if v.role == "recharge" else "#ff7f0e"
+                popup = f"{node} ({v.role})"
+                builder.add_node(lat, lon, popup=popup, color=color)
+            # Agregar aristas
+            for u in graph.vertices:
+                for v, _ in graph.get_neighbors(u):
+                    if u < v:  # Evitar duplicados
+                        builder.add_edge(graph.coords[u], graph.coords[v])
+
+            # Calcular ruta
             if st.button("✈ Calculate Route"):
-                path, cost = st.session_state.sim.calculate_route(origin, destination)
+                if algorithm == "Dijkstra":
+                    path, cost = st.session_state.sim.dijkstra_route(origin, destination)
+                else:
+                    path, cost = None, None  # Solo Dijkstra implementado
                 if path:
                     st.session_state.calculated_path = path
                     st.session_state.calculated_cost = cost
-                    st.session_state.calculated_origin = origin
-                    st.session_state.calculated_destination = destination
                 else:
                     st.session_state.calculated_path = None
                     st.session_state.calculated_cost = None
-                    st.session_state.calculated_origin = None
-                    st.session_state.calculated_destination = None
 
-            # Mostrar grafo resaltando la ruta si existe
-            highlight_edges = None
+            # Dibujar ruta si existe
             if st.session_state.get("calculated_path"):
-                p = st.session_state.calculated_path
-                highlight_edges = list(zip(p, p[1:]))
-            fig = st.session_state.graph_adapter.draw_graph(highlight_edges=highlight_edges)
-            st.pyplot(fig)
+                path = st.session_state.calculated_path
+                path_coords = [graph.coords[n] for n in path]
+                plot_flight_path(builder.map, path_coords, color="red")
+                st.info(f"**Ruta:** {' → '.join(path)} | **Distancia:** {st.session_state.calculated_cost}")
 
+            # Mostrar MST si se pide
+            if st.button("🌲 Show MST (Kruskal)"):
+                mst_edges = graph.kruskal_mst()
+                for u, v, _ in mst_edges:
+                    builder.add_edge(graph.coords[u], graph.coords[v], color="purple")
+
+            # Mostrar mapa folium en Streamlit
+            st_folium(builder.get_map(), width=700, height=500)
+
+            # Botón para completar entrega y crear orden
+            clients = list(st.session_state.sim.get_clients())
+            if st.session_state.get("calculated_path") and clients:
+                client_ids = [client[0] for client in clients]
+                selected_client_id = st.selectbox("Cliente asociado a la orden", client_ids, key="order_client_selectbox2")
+                if st.button("✅ Complete Delivery and Create Order"):
+                    st.session_state.sim.create_order(
+                        origin,
+                        destination,
+                        selected_client_id
+                    )
+                    st.session_state.order_success = True
+
+            # Leyenda
             st.markdown("""
             **Leyenda de colores:**
             <span style='color:#1f77b4'>●</span> Almacenamiento &nbsp;&nbsp;
             <span style='color:#2ca02c'>●</span> Recarga &nbsp;&nbsp;
-            <span style='color:#ff7f0e'>●</span> Cliente
+            <span style='color:#ff7f0e'>●</span> Cliente &nbsp;&nbsp;
+            <span style='color:purple'>━</span> MST
             """, unsafe_allow_html=True)
-
-            # Mostrar ruta si existe en session_state
-            if st.session_state.get("calculated_path"):
-                st.write(f"**Ruta:** {' → '.join(st.session_state.calculated_path)} | **Costo:** {st.session_state.calculated_cost}")
-
-                # Selecciona el cliente asociado a la orden
-                clients = list(st.session_state.sim.get_clients())
-                if clients:
-                    client_ids = [client[0] for client in clients]
-                    selected_client_id = st.selectbox("Cliente asociado a la orden", client_ids, key="order_client_selectbox")
-                    if st.button("✅ Complete Delivery and Create Order"):
-                        st.session_state.sim.create_order(
-                            st.session_state.calculated_origin,
-                            st.session_state.calculated_destination,
-                            selected_client_id
-                        )
-                        st.session_state.order_success = True
-                else:
-                    st.info("Debe agregar al menos un cliente antes de crear una orden.")
-            elif "calculated_path" in st.session_state and st.session_state.calculated_path is None:
-                st.error("No hay ruta disponible con autonomía")
 
     with tab3:
         st.header("🌐 Clients & Orders")

@@ -42,10 +42,11 @@ class HashMap:
         return values
 
     def items(self):
-        items = []
+        result = []
         for bucket in self.map:
-            items.extend(bucket)
-        return items
+            for k, v in bucket:
+                result.append((k, v))
+        return result
 
     def __contains__(self, key):
         return self.get(key) is not None

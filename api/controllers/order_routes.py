@@ -1,6 +1,12 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 router = APIRouter()
+
+class OrderIn(BaseModel):
+    origin: str
+    destination: str
+    client_id: str
 
 @router.get("/orders/")
 def get_orders():
@@ -48,3 +54,13 @@ def complete_order(order_id: int):
         raise HTTPException(status_code=400, detail="La orden no puede ser completada")
     order.complete_order()
     return {"message": f"Orden {order_id} marcada como completada."}
+
+@router.post("/orders/")
+def create_order(order: OrderIn):
+    from api.main import get_simulation
+    sim = get_simulation()
+    if not sim:
+        raise HTTPException(status_code=404, detail="Simulación no inicializada")
+    # Crea la orden en la simulación del backend
+    sim.create_order(order.origin, order.destination, order.client_id)
+    return {"message": "Orden creada correctamente"}

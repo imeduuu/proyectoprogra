@@ -9,9 +9,9 @@ def get_visit_ranking(sim, role_type):
         freq[node] = freq.get(node, 0) + count
     for node, count in sim.dest_freq.items():
         freq[node] = freq.get(node, 0) + count
-    # Filtra por tipo de nodo
+    # Filtra por tipo de nodo y usa .get para evitar KeyError
     result = [
-        {"node_id": node, "visits": freq[node]}
+        {"node_id": node, "visits": freq.get(node, 0)}
         for node in sim.graph.vertices
         if sim.graph.vertices[node].role == role_type
     ]

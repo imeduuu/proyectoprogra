@@ -8,17 +8,17 @@ class OrderIn(BaseModel):
     destination: str
     client_id: str
 
-@router.get("/orders/")
+from sim.global_simulation import get_simulation
+
+@router.get("/")
 def get_orders():
-    from api.main import get_simulation
     sim = get_simulation()
     if not sim:
         raise HTTPException(status_code=404, detail="Simulación no inicializada")
     return [order.to_dict() for _, order in sim.get_orders()]
 
-@router.get("/orders/{order_id}")
+@router.get("/{order_id}")
 def get_order(order_id: int):
-    from api.main import get_simulation
     sim = get_simulation()
     if not sim:
         raise HTTPException(status_code=404, detail="Simulación no inicializada")
@@ -27,9 +27,8 @@ def get_order(order_id: int):
         raise HTTPException(status_code=404, detail="Orden no encontrada")
     return order.to_dict()
 
-@router.post("/orders/{order_id}/cancel")
+@router.post("/{order_id}/cancel")
 def cancel_order(order_id: int):
-    from api.main import get_simulation
     sim = get_simulation()
     if not sim:
         raise HTTPException(status_code=404, detail="Simulación no inicializada")
@@ -41,9 +40,8 @@ def cancel_order(order_id: int):
     order.status = "Cancelled"
     return {"message": f"Orden {order_id} cancelada exitosamente."}
 
-@router.post("/orders/{order_id}/complete")
+@router.post("/{order_id}/complete")
 def complete_order(order_id: int):
-    from api.main import get_simulation
     sim = get_simulation()
     if not sim:
         raise HTTPException(status_code=404, detail="Simulación no inicializada")
@@ -55,12 +53,10 @@ def complete_order(order_id: int):
     order.complete_order()
     return {"message": f"Orden {order_id} marcada como completada."}
 
-@router.post("/orders/")
+@router.post("/")
 def create_order(order: OrderIn):
-    from api.main import get_simulation
     sim = get_simulation()
     if not sim:
         raise HTTPException(status_code=404, detail="Simulación no inicializada")
-    # Crea la orden en la simulación del backend
     sim.create_order(order.origin, order.destination, order.client_id)
     return {"message": "Orden creada correctamente"}

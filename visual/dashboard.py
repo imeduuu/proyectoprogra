@@ -7,13 +7,27 @@ from domain.client import Client
 import matplotlib.pyplot as plt
 import requests
 
+# --- NUEVO: Importa el global_simulation y threading/uvicorn ---
+from sim.global_simulation import set_simulation
+import threading
+import uvicorn
+
 API_URL = "http://127.0.0.1:8000"
 
-if 'sim' not in st.session_state: # Inicializar la simulación
+# --- NUEVO: Lanza FastAPI como thread si no está corriendo ---
+def run_api():
+    uvicorn.run("api.main:app", host="127.0.0.1", port=8000, reload=False, log_level="warning")
+
+if 'api_thread' not in st.session_state:
+    api_thread = threading.Thread(target=run_api, daemon=True)
+    api_thread.start()
+    st.session_state.api_thread = api_thread
+
+if 'sim' not in st.session_state:
     st.session_state.sim = None     
-if 'graph_adapter' not in st.session_state: # Inicializar el adaptador de NetworkX
+if 'graph_adapter' not in st.session_state:
     st.session_state.graph_adapter = None
-if 'order_success' not in st.session_state: # Inicializar el flag de éxito de orden
+if 'order_success' not in st.session_state:
     st.session_state.order_success = False 
 
 def run(): 
@@ -36,8 +50,10 @@ def run():
         if st.button("📊 Start Simulation"):   
             initializer = SimulationInitializer(n_nodes, m_edges)
             graph = initializer.generate_connected_graph()
-            st.session_state.sim = Simulation(graph)
+            sim = Simulation(graph)
+            st.session_state.sim = sim
             st.session_state.graph_adapter = NetworkXAdapter(graph)
+            set_simulation(sim)  # --- NUEVO: Guarda la simulación global ---
             st.success("Simulación iniciada")
 
         # Mostrar resumen y grafo si la simulación ya está creada

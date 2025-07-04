@@ -46,7 +46,9 @@ def run():
     with tab1: 
         st.header("🔄 Run Simulation") 
         n_nodes = st.slider("Número de nodos", 10, 150, 15) 
-        m_edges = st.slider("Número de aristas", n_nodes - 1, 300, 20) 
+        min_edges = n_nodes - 1
+        default_edges = max(min_edges, 20)
+        m_edges = st.slider("Número de aristas", min_edges, 300, default_edges) 
         n_orders = st.slider("Número de órdenes", 10, 300, 10) 
 
         if st.button("📊 Start Simulation"):   
@@ -55,7 +57,7 @@ def run():
             sim = Simulation(graph)
             st.session_state.sim = sim
             st.session_state.graph_adapter = NetworkXAdapter(graph)
-            set_simulation(sim)  # --- NUEVO: Guarda la simulación global ---
+            set_simulation(sim) 
             st.success("Simulación iniciada")
 
         # Mostrar resumen y grafo si la simulación ya está creada

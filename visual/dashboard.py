@@ -6,6 +6,8 @@ from visual.avl_visualizer import AVLVisualizer
 from domain.client import Client
 import matplotlib.pyplot as plt
 import requests
+from visual.map.map_builder import MapBuilder
+from streamlit_folium import st_folium
 
 # --- NUEVO: Importa el global_simulation y threading/uvicorn ---
 from sim.global_simulation import set_simulation
@@ -76,93 +78,121 @@ def run():
     with tab2:
         st.header("🌍 Explore Network")
         if st.session_state.sim:
-            # --- Botón para sincronizar clientes desde la API ---
-            if st.button("🔄 Sincronizar clientes desde la API"):
-                clients_response = requests.get(f"{API_URL}/clients/")
-                if clients_response.status_code == 200:
-                    clients = clients_response.json()
-                    count = 0
-                    for c in clients:
-                        # Evita duplicados si ya existe el cliente en la simulación local
-                        if not any(cl[0] == c["id"] for cl in st.session_state.sim.get_clients()):
-                            new_client = Client(c["id"], c["name"], c["node_id"], c["priority"])
-                            st.session_state.sim.add_client(new_client)
-                            count += 1
-                    st.success(f"Clientes sincronizados con la simulación local. ({count} nuevos)")
-                else:
-                    st.error("No se pudieron obtener los clientes desde la API.")
+            graph = st.session_state.sim.graph
 
-            available_nodes = list(st.session_state.sim.graph.vertices.keys())
-            origin = st.selectbox("Origen", available_nodes, key="origin_input")
-            destination = st.selectbox("Destino", available_nodes, key="destination_input")
+            # Selección de nodos
+            storage_nodes = [v.id for v in graph.vertices.values() if v.role == "storage"]
+            client_nodes = [v.id for v in graph.vertices.values() if v.role == "client"]
+            origin = st.selectbox("Origen (Almacenamiento)", storage_nodes)
+            destination = st.selectbox("Destino (Cliente)", client_nodes)
 
-            # Calcular ruta y guardarla en session_state
+            # Algoritmo
+            algorithm = st.radio("Algoritmo a utilizar", ["Dijkstra", "Floyd-Warshall"])
+
+            # Calcular ruta
             if st.button("✈ Calculate Route"):
-                path, cost = st.session_state.sim.calculate_route(origin, destination)
-                if path:
+                if algorithm == "Dijkstra":
+                    path, cost = graph.dijkstra(origin, destination)
+                else:
+                    dist, get_path = graph.floyd_warshall()
+                    path = get_path(origin, destination)
+                    cost = dist[origin][destination] if path else float('inf')
+                if path and cost != float('inf'):
                     st.session_state.calculated_path = path
                     st.session_state.calculated_cost = cost
-                    st.session_state.calculated_origin = origin
-                    st.session_state.calculated_destination = destination
                 else:
                     st.session_state.calculated_path = None
                     st.session_state.calculated_cost = None
-                    st.session_state.calculated_origin = None
-                    st.session_state.calculated_destination = None
 
-            # Mostrar grafo resaltando la ruta si existe
-            highlight_edges = None
+            # Mostrar MST
+            if st.button("🌲 Show MST (Kruskal)"):
+                mst_edges = graph.kruskal_mst()
+                st.session_state.mst_edges = mst_edges
+            else:
+                st.session_state.mst_edges = None
+
+            # Construir el mapa
+            map_builder = MapBuilder()
+            # Colores por rol
+            color_map = {"storage": "blue", "recharge": "green", "client": "orange"}
+
+            # Agregar nodos
+            for v in graph.vertices.values():
+                lat = getattr(v, "lat", None)
+                lon = getattr(v, "lon", None)
+                if lat is not None and lon is not None:
+                    map_builder.add_node(lat, lon, popup=f"{v.id} ({v.role})", color=color_map.get(v.role, "gray"))
+
+            # Agregar aristas normales
+            for v in graph.vertices.values():
+                for neighbor_id, _ in v.get_neighbors():
+                    if v.id < neighbor_id:  # Evita duplicados
+                        neighbor = graph.vertices[neighbor_id]
+                        map_builder.add_edge((v.lat, v.lon), (neighbor.lat, neighbor.lon), color="gray")
+
+            # Resaltar ruta calculada
             if st.session_state.get("calculated_path"):
-                p = st.session_state.calculated_path
-                highlight_edges = list(zip(p, p[1:]))
-            fig = st.session_state.graph_adapter.draw_graph(highlight_edges=highlight_edges)
-            st.pyplot(fig)
+                path = st.session_state.calculated_path
+                for i in range(len(path) - 1):
+                    v1 = graph.vertices[path[i]]
+                    v2 = graph.vertices[path[i+1]]
+                    map_builder.add_edge((v1.lat, v1.lon), (v2.lat, v2.lon), color="red")
 
-            st.markdown("""
-            **Leyenda de colores:**
-            <span style='color:#1f77b4'>●</span> Almacenamiento &nbsp;&nbsp;
-            <span style='color:#2ca02c'>●</span> Recarga &nbsp;&nbsp;
-            <span style='color:#ff7f0e'>●</span> Cliente
-            """, unsafe_allow_html=True)
+            # Resaltar MST si corresponde
+            if st.session_state.get("mst_edges"):
+                for u, v, _ in st.session_state.mst_edges:
+                    v1 = graph.vertices[u]
+                    v2 = graph.vertices[v]
+                    map_builder.add_edge((v1.lat, v1.lon), (v2.lat, v2.lon), color="blue")
 
-            # Mostrar ruta si existe en session_state
+            # Mostrar el mapa en Streamlit
+            st_folium(map_builder.get_map(), width=700, height=500)
+
+            # Mostrar resumen de ruta
             if st.session_state.get("calculated_path"):
-                st.write(f"**Ruta:** {' → '.join(st.session_state.calculated_path)} | **Costo:** {st.session_state.calculated_cost}")
+                st.success(f"Ruta: {' → '.join(st.session_state.calculated_path)} | Costo: {st.session_state.calculated_cost}")
 
-                # Selecciona el cliente asociado a la orden
-                clients = list(st.session_state.sim.get_clients())
-                if clients:
-                    client_ids = [client[0] for client in clients]
-                    selected_client_id = st.selectbox("Cliente asociado a la orden", client_ids, key="order_client_selectbox")
-                    if st.button("✅ Complete Delivery and Create Order"):
-                        # 1. Crear orden localmente
-                        st.session_state.sim.create_order(
-                            st.session_state.calculated_origin,
-                            st.session_state.calculated_destination,
-                            selected_client_id
-                        )
-                        st.session_state.order_success = True
+            # Mostrar resumen MST
+            if st.session_state.get("mst_edges"):
+                st.info(f"Árbol de Expansión Mínima: {len(st.session_state.mst_edges)} aristas, peso total: {sum(w for _, _, w in st.session_state.mst_edges)}")
 
-                        # 2. Crear orden en la API
-                        order_data = {
-                            "origin": st.session_state.calculated_origin,
-                            "destination": st.session_state.calculated_destination,
-                            "client_id": selected_client_id
-                        }
-                        resp = requests.post(f"{API_URL}/orders/", json=order_data)
-                        if resp.status_code == 200:
-                            st.success("Orden creada en la API correctamente.")
-                        else:
-                            st.error("Error al crear la orden en la API.")
+        # Botón para completar orden
+        if st.button("✅ Completar Orden"):
+            clientes = st.session_state.sim.get_clients()
+            # Validar que exista un cliente en el nodo destino
+            cliente_en_destino = any(str(c[1].node_id) == str(destination) for c in clientes)
+            if not cliente_en_destino:
+                st.error("Debe existir un cliente creado en el nodo de destino para completar la orden.")
+            elif not st.session_state.get("calculated_path"):
+                st.error("Debe calcular una ruta antes de completar la orden.")
+            else:
+                # Busca el id del cliente en el nodo destino
+                cliente_id = None
+                for c in clientes:
+                    if str(c[1].node_id) == str(destination):
+                        cliente_id = c[1].id
+                        break
+                if cliente_id is not None:
+                    st.session_state.sim.create_order(origin, destination, client_id=cliente_id)
+                    st.success("Orden completada y registrada correctamente.")
                 else:
-                    st.info("Debe agregar al menos un cliente antes de crear una orden.")
-            elif "calculated_path" in st.session_state and st.session_state.calculated_path is None:
-                st.error("No hay ruta disponible con autonomía")
+                    st.error("No se pudo encontrar el cliente en el nodo destino.")
 
     with tab3:
         st.header("🌐 Clients & Orders (API)")
+        if st.button("🔄 Recargar datos de la API"):
+            st.session_state['reload_api'] = True
+
+        # Luego, usa reload_api para volver a consultar la API
+        if st.session_state.get('reload_api', False):
+            clients_response = requests.get(f"{API_URL}/clients/")
+            orders_response = requests.get(f"{API_URL}/orders/")
+            st.session_state['reload_api'] = False
+        else:
+            clients_response = requests.get(f"{API_URL}/clients/")
+            orders_response = requests.get(f"{API_URL}/orders/")
+
         # Mostrar clientes desde la API
-        clients_response = requests.get(f"{API_URL}/clients/")
         if clients_response.status_code == 200:
             clients = clients_response.json()
             st.subheader("Clientes")
@@ -171,7 +201,6 @@ def run():
             st.error("No se pudieron obtener los clientes desde la API.")
 
         # Mostrar órdenes desde la API
-        orders_response = requests.get(f"{API_URL}/orders/")
         if orders_response.status_code == 200:
             orders = orders_response.json()
             st.subheader("Órdenes")

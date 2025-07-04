@@ -8,9 +8,11 @@ class SimulationInitializer:
         self.graph = Graph()
 
     def generate_connected_graph(self):
-        # Crear nodos
+        # Crear nodos con latitud y longitud aleatoria en Temuco
         for i in range(self.n_nodes):
-            self.graph.add_vertex(str(i))
+            lat = random.uniform(-38.76, -38.70)
+            lon = random.uniform(-72.65, -72.55)
+            self.graph.add_vertex(str(i), lat=lat, lon=lon)
 
         # Asignar roles
         self.assign_roles()
@@ -19,7 +21,7 @@ class SimulationInitializer:
         nodes = list(self.graph.vertices.keys())
         random.shuffle(nodes)
         for i in range(self.n_nodes - 1):
-            weight = random.randint(1, 20)#valor aleatorio de peso en las aristas
+            weight = random.randint(1, 20)  # valor aleatorio de peso en las aristas
             self.graph.add_edge(nodes[i], nodes[i + 1], weight)
 
         # Añadir aristas extra al azar hasta completar m_edges

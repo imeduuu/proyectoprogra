@@ -19,7 +19,6 @@ class NetworkXAdapter:
         G = self.to_networkx()
         pos = nx.spring_layout(G, seed=42)
 
-        # Colores según rol
         colors = []
         for node in G.nodes(data=True):
             role = node[1]['role']
@@ -33,7 +32,6 @@ class NetworkXAdapter:
         fig, ax = plt.subplots()
         nx.draw(G, pos, with_labels=True, node_color=colors, node_size=500, ax=ax)
 
-        # Dibujar aristas resaltadas en rojo si se especifican
         if highlight_edges:
             nx.draw_networkx_edges(
                 G, pos,

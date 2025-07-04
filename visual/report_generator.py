@@ -156,5 +156,4 @@ class ReportGenerator:
             os.unlink(tmpfile2.name)
             pdf.ln(5)
 
-        # ✅ Devuelve el PDF como bytes (funcional y sin errores)
         return pdf.output(dest='S').encode('latin1', errors='replace')

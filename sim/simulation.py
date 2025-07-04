@@ -3,6 +3,7 @@ from tda.hash_map import HashMap
 from domain.order import Order
 from collections import deque
 import streamlit as st
+import uuid
 
 class Simulation:
     def __init__(self, graph):
@@ -10,7 +11,6 @@ class Simulation:
         self.orders = HashMap()
         self.clients = HashMap()
         self.route_log = AVLTree()
-        self.order_id = 0
         self.origin_freq = {}
         self.dest_freq = {}
         
@@ -21,15 +21,21 @@ class Simulation:
         path, cost = self.calculate_route(origin, destination)
         if path:
             st.write(f"ORDEN CREADA: {origin} → {destination} | Ruta: {' → '.join(path)} | Costo: {cost}")
-            order = Order(self.order_id, origin, destination, path, cost, client_id)
-            self.orders.insert(self.order_id, order)
-            self.order_id += 1
+            order_id = uuid.uuid4().hex  # ID hash único
+            order = Order(order_id, origin, destination, path, cost, client_id)
+            self.orders.insert(order_id, order)
             # Registrar ruta en AVL
             route_key = " → ".join(path)
             self.route_log.insert(route_key)
             # Registrar frecuencia de origen y destino
             self.origin_freq[origin] = self.origin_freq.get(origin, 0) + 1
             self.dest_freq[destination] = self.dest_freq.get(destination, 0) + 1
+            #Contar visitas a nodos de recarga en la ruta ---
+            if not hasattr(self, 'recharge_freq'):
+                self.recharge_freq = {}
+            for node in path:
+                if self.graph.vertices[node].role == 'recharge':
+                    self.recharge_freq[node] = self.recharge_freq.get(node, 0) + 1
             return order
         st.write("NO SE CREÓ ORDEN (no hay ruta)")
         return None
@@ -90,6 +96,9 @@ class Simulation:
 
     def get_route_frequencies(self):
         return self.route_log.inorder()
+
+    def get_recharge_frequencies(self):
+        return getattr(self, 'recharge_freq', {})
 
     def dijkstra_route(self, origin, destination):
         """

@@ -8,15 +8,12 @@ import matplotlib.pyplot as plt
 import requests
 from visual.map.map_builder import MapBuilder
 from streamlit_folium import st_folium
-
-# --- NUEVO: Importa el global_simulation y threading/uvicorn ---
 from sim.global_simulation import set_simulation
 import threading
 import uvicorn
 
 API_URL = "http://127.0.0.1:8000"
 
-# --- NUEVO: Lanza FastAPI como thread si no está corriendo ---
 def run_api():
     uvicorn.run("api.main:app", host="127.0.0.1", port=8000, reload=False, log_level="warning")
 
@@ -220,14 +217,12 @@ def run():
 
         # Formulario para agregar cliente usando la API
         with st.form("add_client_form"):
-            client_id = st.text_input("ID del cliente")
             client_name = st.text_input("Nombre del cliente")
             node_id = st.text_input("Nodo donde se ubicará el cliente")
             priority = st.selectbox("Prioridad", [1, 2, 3, 4, 5], index=0)
             submit = st.form_submit_button("Agregar cliente")
             if submit:
                 client_data = {
-                    "id": client_id,
                     "name": client_name,
                     "node_id": node_id,
                     "priority": priority
@@ -285,6 +280,9 @@ def run():
             st.json(st.session_state.sim.origin_freq)
             st.subheader("Frecuencia de nodos destino")
             st.json(st.session_state.sim.dest_freq)
+            # Mostrar frecuencia de nodos de recarga
+            st.subheader("Frecuencia de visitas a nodos de recarga (en rutas)")
+            st.json(st.session_state.sim.get_recharge_frequencies())
 
             # Calcular los nodos más visitados por tipo usando las frecuencias
             roles_dict = {k: v.role for k, v in st.session_state.sim.graph.vertices.items()}
@@ -329,7 +327,6 @@ def run():
             else:
                 st.info("Aún no hay visitas registradas en los nodos.")
 
-            # 🔽 BOTÓN PARA DESCARGAR EL PDF
             st.subheader("📄 Descargar Reporte PDF")
             if st.button("📥 Generar informe PDF"):
                 try:

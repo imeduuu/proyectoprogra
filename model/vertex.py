@@ -3,8 +3,8 @@ class Vertex:
         self.id = id
         self.role = role
         self.neighbors = {}
-        self.lat = lat  # Nueva propiedad para latitud
-        self.lon = lon  # Nueva propiedad para longitud
+        self.lat = lat  
+        self.lon = lon  
 
     def add_neighbor(self, neighbor_id, weight):
         self.neighbors[neighbor_id] = weight

@@ -4,7 +4,6 @@ from pydantic import BaseModel
 router = APIRouter()
 
 class ClientIn(BaseModel):
-    id: str
     name: str
     node_id: str
     priority: int
@@ -16,7 +15,13 @@ def get_clients():
     sim = get_simulation()
     if not sim:
         raise HTTPException(status_code=404, detail="Simulación no inicializada")
-    return [client.to_dict() for _, client in sim.get_clients()]
+    # Devuelve el rol real del nodo asociado a cada cliente
+    result = []
+    for _, client in sim.get_clients():
+        node = sim.graph.vertices.get(client.node_id)
+        role = node.role if node else None
+        result.append(client.to_dict(role=role))
+    return result
 
 @router.get("/{client_id}")
 def get_client(client_id: str):
@@ -40,6 +45,9 @@ def add_client(client: ClientIn):
     # Validar que el nodo es de tipo 'client'
     if sim.graph.vertices[client.node_id].role != "client":
         raise HTTPException(status_code=400, detail="Solo se pueden asignar clientes a nodos de tipo 'client'.")
-    new_client = DomainClient(client.id, client.name, client.node_id, client.priority)
+    # Generar ID automático creciente
+    existing_ids = [int(c[0]) for c in sim.get_clients() if str(c[0]).isdigit()]
+    next_id = str(max(existing_ids) + 1) if existing_ids else "0"
+    new_client = DomainClient(next_id, client.name, client.node_id, client.priority)
     sim.add_client(new_client)
-    return {"message": "Cliente agregado correctamente"}
+    return {"message": "Cliente agregado correctamente", "id": next_id}

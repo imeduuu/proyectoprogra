@@ -74,6 +74,12 @@ def run():
             st.markdown(f"**Nodos:** {len(st.session_state.sim.graph.vertices)}  \n**Aristas:** {st.session_state.sim.graph.edge_count()}")
             fig = st.session_state.graph_adapter.draw_graph()
             st.pyplot(fig)
+            st.markdown("""
+**Leyenda de colores:**
+<span style='color:#1f77b4'>●</span> Almacenamiento &nbsp;&nbsp;
+<span style='color:#2ca02c'>●</span> Recarga &nbsp;&nbsp;
+<span style='color:#ff7f0e'>●</span> Cliente
+""", unsafe_allow_html=True)
 
     with tab2:
         st.header("🌍 Explore Network")
@@ -104,12 +110,12 @@ def run():
                     st.session_state.calculated_path = None
                     st.session_state.calculated_cost = None
 
-            # Mostrar MST
-            if st.button("🌲 Show MST (Kruskal)"):
-                mst_edges = graph.kruskal_mst()
-                st.session_state.mst_edges = mst_edges
-            else:
-                st.session_state.mst_edges = None
+            # Mostrar/ocultar MST (Kruskal) como toggle
+            if "show_mst" not in st.session_state:
+                st.session_state.show_mst = False
+
+            if st.button("🌲 Mostrar/ocultar MST (Kruskal)"):
+                st.session_state.show_mst = not st.session_state.show_mst
 
             # Construir el mapa
             map_builder = MapBuilder()
@@ -138,12 +144,14 @@ def run():
                     v2 = graph.vertices[path[i+1]]
                     map_builder.add_edge((v1.lat, v1.lon), (v2.lat, v2.lon), color="red")
 
-            # Resaltar MST si corresponde
-            if st.session_state.get("mst_edges"):
-                for u, v, _ in st.session_state.mst_edges:
+            # Resaltar MST si corresponde (usando toggle)
+            if st.session_state.show_mst:
+                mst_edges = graph.kruskal_mst()
+                for u, v, _ in mst_edges:
                     v1 = graph.vertices[u]
                     v2 = graph.vertices[v]
                     map_builder.add_edge((v1.lat, v1.lon), (v2.lat, v2.lon), color="blue")
+                st.info(f"Árbol de Expansión Mínima: {len(mst_edges)} aristas, peso total: {sum(w for _, _, w in mst_edges)}")
 
             # Mostrar el mapa en Streamlit
             st_folium(map_builder.get_map(), width=700, height=500)

@@ -261,6 +261,7 @@ def run():
                 fig = visualizer.draw()
                 st.pyplot(fig)
 
+
     with tab5:
         st.header("📈 General Statistics")
         if st.session_state.sim:
@@ -275,6 +276,7 @@ def run():
                 f"Recarga: {recharge} ({recharge/total:.0%})  \n"
                 f"Cliente: {client} ({client/total:.0%})"
             )
+
             fig = st.session_state.graph_adapter.draw_graph()
             st.pyplot(fig)
 
@@ -287,22 +289,21 @@ def run():
             # Calcular los nodos más visitados por tipo usando las frecuencias
             roles_dict = {k: v.role for k, v in st.session_state.sim.graph.vertices.items()}
 
-            # Combina frecuencias de origen y destino para cada nodo
             total_freq = {}
             for node in st.session_state.sim.graph.vertices.keys():
-                total_freq[node] = st.session_state.sim.origin_freq.get(node, 0) + st.session_state.sim.dest_freq.get(node, 0)
+                total_freq[node] = (
+                    st.session_state.sim.origin_freq.get(node, 0) +
+                    st.session_state.sim.dest_freq.get(node, 0)
+                )
 
-            # Agrupa por tipo de nodo
             storage = [(node, freq) for node, freq in total_freq.items() if roles_dict[node] == 'storage']
             recharge = [(node, freq) for node, freq in total_freq.items() if roles_dict[node] == 'recharge']
             client = [(node, freq) for node, freq in total_freq.items() if roles_dict[node] == 'client']
 
-            # Toma los 5 más visitados de cada tipo
             top_storage = sorted(storage, key=lambda x: x[1], reverse=True)[:5]
             top_recharge = sorted(recharge, key=lambda x: x[1], reverse=True)[:5]
             top_client = sorted(client, key=lambda x: x[1], reverse=True)[:5]
 
-            # Prepara datos para el gráfico de barras
             bar_labels = (
                 [f"Storage {n}" for n, _ in top_storage] +
                 [f"Recharge {n}" for n, _ in top_recharge] +
@@ -317,13 +318,34 @@ def run():
             if bar_labels:
                 st.subheader("Nodos más visitados por tipo")
                 fig2, ax2 = plt.subplots()
-                ax2.bar(bar_labels, bar_values, color=['#1f77b4']*len(top_storage) + ['#2ca02c']*len(top_recharge) + ['#ff7f0e']*len(top_client))
+                ax2.bar(bar_labels, bar_values,
+                        color=['#1f77b4']*len(top_storage) +
+                              ['#2ca02c']*len(top_recharge) +
+                              ['#ff7f0e']*len(top_client))
                 ax2.set_ylabel("Frecuencia de visitas (origen + destino)")
-                ax2.set_xticks(range(len(bar_labels))) 
+                ax2.set_xticks(range(len(bar_labels)))
                 ax2.set_xticklabels(bar_labels, rotation=45, ha='right')
                 st.pyplot(fig2)
             else:
                 st.info("Aún no hay visitas registradas en los nodos.")
+
+            # 🔽 BOTÓN PARA DESCARGAR EL PDF
+            st.subheader("📄 Descargar Reporte PDF")
+            if st.button("📥 Generar informe PDF"):
+                try:
+                    response = requests.get("http://127.0.0.1:8000/reports/reports/pdf")  
+                    if response.status_code == 200:
+                        st.success("✅ Informe generado correctamente.")
+                        st.download_button(
+                            label="⬇️ Haz clic aquí para descargar el PDF",
+                            data=response.content,
+                            file_name="reporte.pdf",
+                            mime="application/pdf"
+                        )
+                    else:
+                        st.error(f"❌ Error al generar el PDF: {response.status_code}")
+                except Exception as e:
+                    st.error(f"❌ No se pudo conectar al servidor: {e}")
 
 if __name__ == "__main__":
     run()
